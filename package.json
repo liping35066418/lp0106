@@ -1,0 +1,15 @@
+{
+  "name": "fresh-order-dashboard",
+  "version": "1.0.0",
+  "description": "生鲜订单数据聚合看板",
+  "main": "backend/index.js",
+  "scripts": {
+    "start:backend": "node backend/index.js",
+    "start:frontend": "node frontend/server.js",
+    "start": "npm run start:backend & npm run start:frontend"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  }
+}
