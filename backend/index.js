@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { generateMockOrders, aggregateStats } = require('./data');
+const { generateMockOrders, aggregateStats, CATEGORIES } = require('./data');
 
 const app = express();
 const PORT = 8876;
@@ -60,19 +60,118 @@ function filterOrdersByDetail(orders, category, product) {
   });
 }
 
+function aggregateStatsFiltered(orders, category) {
+  if (!category) return aggregateStats(orders);
+
+  let orderCount = 0;
+  let totalRevenue = 0;
+  let totalItems = 0;
+  const productSales = {};
+  const categorySales = {};
+
+  CATEGORIES.forEach(cat => { categorySales[cat] = { quantity: 0, revenue: 0 }; });
+
+  orders.forEach(order => {
+    let hasCategoryItem = false;
+    let catRevenue = 0;
+    let catItems = 0;
+
+    order.items.forEach(item => {
+      if (categorySales[item.category]) {
+        categorySales[item.category].quantity += item.quantity;
+        categorySales[item.category].revenue += item.subtotal;
+      }
+
+      if (item.category === category) {
+        hasCategoryItem = true;
+        catItems += item.quantity;
+        catRevenue += item.subtotal;
+
+        if (!productSales[item.name]) {
+          productSales[item.name] = {
+            category: item.category,
+            quantity: 0,
+            revenue: 0,
+            unitPrice: item.unitPrice
+          };
+        }
+        productSales[item.name].quantity += item.quantity;
+        productSales[item.name].revenue += item.subtotal;
+      }
+    });
+
+    if (hasCategoryItem) {
+      orderCount++;
+      totalRevenue += catRevenue;
+      totalItems += catItems;
+    }
+  });
+
+  for (const name in productSales) {
+    productSales[name].revenue = Math.round(productSales[name].revenue * 100) / 100;
+  }
+  for (const cat in categorySales) {
+    categorySales[cat].revenue = Math.round(categorySales[cat].revenue * 100) / 100;
+  }
+
+  totalRevenue = Math.round(totalRevenue * 100) / 100;
+  const avgOrderValue = orderCount > 0 ? Math.round((totalRevenue / orderCount) * 100) / 100 : 0;
+
+  return {
+    orderCount,
+    totalRevenue,
+    avgOrderValue,
+    totalItems,
+    productSales,
+    categorySales
+  };
+}
+
+function getPreviousPeriodParams(period, nowIso) {
+  const now = new Date(nowIso);
+  if (period === 'day') {
+    const prev = new Date(now);
+    prev.setDate(prev.getDate() - 1);
+    const prevNow = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
+    return { date: prev.toISOString(), now: prevNow.toISOString() };
+  } else {
+    const prev = new Date(now);
+    prev.setDate(prev.getDate() - 7);
+    const prevNow = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
+    return { date: prev.toISOString(), now: prevNow.toISOString() };
+  }
+}
+
 app.get('/api/stats', (req, res) => {
-  const { period = 'day', date = new Date().toISOString(), now } = req.query;
+  const { period = 'day', date = new Date().toISOString(), now, category } = req.query;
+  const cat = category || null;
   const filteredOrders = filterByPeriod(orders, period, date, now);
-  const stats = aggregateStats(filteredOrders);
+  const stats = aggregateStatsFiltered(filteredOrders, cat);
+
+  let comparison = null;
+  if (now) {
+    const prevParams = getPreviousPeriodParams(period, now);
+    const prevOrders = filterByPeriod(orders, period, prevParams.date, prevParams.now);
+    const prevStats = aggregateStatsFiltered(prevOrders, cat);
+    comparison = {
+      orderCount: prevStats.orderCount,
+      totalRevenue: prevStats.totalRevenue,
+      avgOrderValue: prevStats.avgOrderValue,
+      totalItems: prevStats.totalItems
+    };
+  }
+
   res.json({
     period,
     date,
     now,
+    category: cat,
     orderCount: stats.orderCount,
     totalRevenue: stats.totalRevenue,
     avgOrderValue: stats.avgOrderValue,
     totalItems: stats.totalItems,
-    categorySales: stats.categorySales
+    categorySales: stats.categorySales,
+    comparison
   });
 });
 
@@ -97,9 +196,10 @@ app.get('/api/products', (req, res) => {
 });
 
 app.get('/api/ranking', (req, res) => {
-  const { period = 'day', date = new Date().toISOString(), top = 10, now } = req.query;
+  const { period = 'day', date = new Date().toISOString(), top = 10, now, category } = req.query;
+  const cat = category || null;
   const filteredOrders = filterByPeriod(orders, period, date, now);
-  const stats = aggregateStats(filteredOrders);
+  const stats = aggregateStatsFiltered(filteredOrders, cat);
   const ranking = Object.entries(stats.productSales)
     .map(([name, data]) => ({
       rank: 0,
@@ -115,6 +215,7 @@ app.get('/api/ranking', (req, res) => {
     period,
     date,
     now,
+    category: cat,
     top: parseInt(top),
     ranking
   });
