@@ -265,6 +265,128 @@
     color: #999;
     font-size: 14px;
   }
+  .clickable {
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .clickable:hover {
+    background: #f1f8e9;
+    border-radius: 8px;
+  }
+  .stat-card.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .stat-card.clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .modal-mask {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 860px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+  }
+  .modal-summary {
+    padding: 12px 24px;
+    background: #f9fbe7;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+    color: #558b2f;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .modal-summary strong {
+    color: #33691e;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #333; }
+  .modal-body {
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .order-group {
+    padding: 14px 24px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .order-group:last-child { border-bottom: none; }
+  .order-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .order-id {
+    font-weight: 600;
+    color: #333;
+  }
+  .order-time {
+    color: #999;
+  }
+  .order-amount {
+    color: #e65100;
+    font-weight: 600;
+  }
+  .order-items {
+    margin-left: 12px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.8;
+  }
+  .order-item-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 60px 80px;
+    gap: 8px;
+  }
+  .order-item-row .qty { text-align: right; }
+  .order-item-row .price { text-align: right; color: #888; }
+  .order-item-row .sub { text-align: right; color: #e65100; font-weight: 500; }
+  .highlight {
+    background: #fff9c4;
+    padding: 0 3px;
+    border-radius: 3px;
+  }
+  .empty-tip {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+  }
   @media (max-width: 900px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .panels { grid-template-columns: 1fr; }
@@ -286,25 +408,25 @@
   </div>
 
   <div class="stats-grid">
-    <div class="stat-card order">
-      <div class="stat-label">📦 订单数量</div>
+    <div class="stat-card order clickable" onclick="openOrderDetail({type:'all'})">
+      <div class="stat-label" id="orderCountLabel">📦 今日订单</div>
       <div class="stat-value" id="orderCount">--</div>
-      <div class="stat-desc">统计周期内全部订单</div>
+      <div class="stat-desc" id="orderCountDesc">统计周期内全部订单</div>
     </div>
-    <div class="stat-card revenue">
-      <div class="stat-label">💰 全天总营收</div>
+    <div class="stat-card revenue clickable" onclick="openOrderDetail({type:'all'})">
+      <div class="stat-label" id="revenueLabel">💰 今日营收</div>
       <div class="stat-value yuan" id="totalRevenue">--</div>
-      <div class="stat-desc">所有订单金额合计</div>
+      <div class="stat-desc" id="revenueDesc">所有订单金额合计</div>
     </div>
     <div class="stat-card avg">
-      <div class="stat-label">📊 平均客单价</div>
+      <div class="stat-label" id="avgLabel">📊 平均客单价</div>
       <div class="stat-value yuan" id="avgOrderValue">--</div>
       <div class="stat-desc">总营收 ÷ 订单数量</div>
     </div>
-    <div class="stat-card items">
-      <div class="stat-label">🛒 售出件数</div>
+    <div class="stat-card items clickable" onclick="openOrderDetail({type:'all'})">
+      <div class="stat-label" id="itemsLabel">🛒 今日售出件数</div>
       <div class="stat-value" id="totalItems">--</div>
-      <div class="stat-desc">全部商品售出总件数</div>
+      <div class="stat-desc" id="itemsDesc">全部商品售出总件数</div>
     </div>
   </div>
 
@@ -337,14 +459,18 @@
 <script>
   const API_BASE = 'http://localhost:8876/api';
   let currentPeriod = 'day';
+  let lastStats = null;
+  let lastRanking = null;
 
   function getDateLabel(period) {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
     if (period === 'day') {
-      return `统计日期：${y}年${m}月${d}日（今日）`;
+      return `统计日期：${y}年${m}月${d}日（截至 ${hh}:${mm}，只统计已发生订单）`;
     } else {
       const day = now.getDay();
       const mondayOffset = day === 0 ? 6 : day - 1;
@@ -356,7 +482,25 @@
       const sd = String(monday.getDate()).padStart(2, '0');
       const em = String(sunday.getMonth() + 1).padStart(2, '0');
       const ed = String(sunday.getDate()).padStart(2, '0');
-      return `统计周期：${y}年${sm}月${sd}日 至 ${y}年${em}月${ed}日（本周）`;
+      return `统计周期：${y}年${sm}月${sd}日 至 ${y}年${em}月${ed}日（截至 ${hh}:${mm}）`;
+    }
+  }
+
+  function updateLabels(period) {
+    if (period === 'day') {
+      document.getElementById('orderCountLabel').textContent = '📦 今日订单';
+      document.getElementById('orderCountDesc').textContent = '今日截至当前时刻订单数';
+      document.getElementById('revenueLabel').textContent = '💰 今日营收';
+      document.getElementById('revenueDesc').textContent = '截至当前所有订单金额合计';
+      document.getElementById('itemsLabel').textContent = '🛒 今日售出件数';
+      document.getElementById('itemsDesc').textContent = '截至当前商品售出总件数';
+    } else {
+      document.getElementById('orderCountLabel').textContent = '📦 本周订单';
+      document.getElementById('orderCountDesc').textContent = '本周截至当前时刻订单数';
+      document.getElementById('revenueLabel').textContent = '💰 本周营收';
+      document.getElementById('revenueDesc').textContent = '本周截至当前订单金额合计';
+      document.getElementById('itemsLabel').textContent = '🛒 本周售出件数';
+      document.getElementById('itemsDesc').textContent = '本周截至当前商品售出总件数';
     }
   }
 
@@ -379,14 +523,18 @@
 
   async function loadData() {
     document.getElementById('dateInfo').textContent = getDateLabel(currentPeriod);
+    updateLabels(currentPeriod);
 
     try {
+      const nowIso = new Date().toISOString();
       const [statsRes, rankRes] = await Promise.all([
-        fetch(`${API_BASE}/stats?period=${currentPeriod}`),
-        fetch(`${API_BASE}/ranking?period=${currentPeriod}&top=10`)
+        fetch(`${API_BASE}/stats?period=${currentPeriod}&now=${encodeURIComponent(nowIso)}`),
+        fetch(`${API_BASE}/ranking?period=${currentPeriod}&top=10&now=${encodeURIComponent(nowIso)}`)
       ]);
       const stats = await statsRes.json();
       const rankData = await rankRes.json();
+      lastStats = stats;
+      lastRanking = rankData.ranking;
       renderStats(stats);
       renderCategories(stats.categorySales);
       renderRanking(rankData.ranking);
@@ -408,7 +556,7 @@
     const html = list.map(([name, data]) => {
       const pct = (data.quantity / maxQty * 100).toFixed(1);
       return `
-        <div class="category-row">
+        <div class="category-row clickable" style="padding:6px 4px;margin:-6px -4px;" onclick='openOrderDetail(${JSON.stringify({type:'category', name})})'>
           <div class="cat-name">${name}</div>
           <div class="cat-bar-wrap">
             <div class="cat-bar ${catBarClass(name)}" style="width:${pct}%"></div>
@@ -422,14 +570,16 @@
   }
 
   function renderRanking(list) {
-    const html = list.map(item => `
-      <div class="rank-row">
+    const html = list.map(item => {
+      const filterParam = encodeURIComponent(JSON.stringify({type:'product', name: item.name}));
+      return `
+      <div class="rank-row clickable" onclick='openOrderDetail(${JSON.stringify({type:'product', name: item.name})})'>
         <span class="rank-badge">${item.rank}</span>
         <div class="rank-name">${item.name}<span class="rank-cat">${item.category}</span></div>
         <div class="rank-qty">${formatNum(item.quantity)} 件</div>
         <div class="rank-revenue">¥ ${formatNum(item.revenue)}</div>
       </div>
-    `).join('');
+    `;}).join('');
     document.getElementById('rankingList').innerHTML = html;
   }
 
@@ -439,6 +589,114 @@
       btn.classList.toggle('active', btn.dataset.period === p);
     });
     loadData();
+  }
+
+  function formatTime(iso) {
+    const d = new Date(iso);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${m}-${day} ${hh}:${mm}`;
+  }
+
+  async function openOrderDetail(filter) {
+    const nowIso = new Date().toISOString();
+    let url = `${API_BASE}/orders?period=${currentPeriod}&now=${encodeURIComponent(nowIso)}`;
+    if (filter.type === 'category') {
+      url += `&category=${encodeURIComponent(filter.name)}`;
+    } else if (filter.type === 'product') {
+      url += `&product=${encodeURIComponent(filter.name)}`;
+    }
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      showOrderModal(filter, data.orders);
+    } catch (e) {
+      console.error('加载订单失败', e);
+      alert('加载订单明细失败');
+    }
+  }
+
+  function showOrderModal(filter, orders) {
+    let title = '';
+    let summary = '';
+    if (filter.type === 'all') {
+      title = currentPeriod === 'day' ? '今日全部订单明细' : '本周全部订单明细';
+    } else if (filter.type === 'category') {
+      title = '「' + filter.name + '」分类订单明细';
+    } else if (filter.type === 'product') {
+      title = '「' + filter.name + '」相关订单明细';
+    }
+
+    let totalQty = 0;
+    let totalAmount = 0;
+    let matchQty = 0;
+    let matchAmount = 0;
+
+    const orderHtml = orders.map(order => {
+      totalAmount += order.totalAmount;
+      let itemsHtml = '';
+      order.items.forEach(it => {
+        const match = (filter.type === 'all')
+          || (filter.type === 'category' && it.category === filter.name)
+          || (filter.type === 'product' && it.name === filter.name);
+        if (match) {
+          totalQty += it.quantity;
+          matchAmount += it.subtotal;
+        }
+        const nameCls = match ? 'highlight' : '';
+        itemsHtml += `<div class="order-item-row">
+          <span class="${nameCls}">${it.name} <span style="color:#aaa;font-size:12px;">${it.category}</span></span>
+          <span class="price">¥${it.unitPrice.toFixed(2)}</span>
+          <span class="qty">×${it.quantity}</span>
+          <span class="sub">¥${it.subtotal.toFixed(2)}</span>
+        </div>`;
+      });
+      return `<div class="order-group">
+        <div class="order-head">
+          <span><span class="order-id">${order.orderId}</span> &nbsp; <span class="order-time">${formatTime(order.orderTime)}</span></span>
+          <span class="order-amount">¥ ${order.totalAmount.toFixed(2)}</span>
+        </div>
+        <div class="order-items">${itemsHtml}</div>
+      </div>`;
+    }).join('');
+
+    if (filter.type === 'all') {
+      matchQty = lastStats ? lastStats.totalItems : totalQty;
+      matchAmount = lastStats ? lastStats.totalRevenue : totalAmount;
+    } else if (filter.type === 'category' && lastStats && lastStats.categorySales && lastStats.categorySales[filter.name]) {
+      matchQty = lastStats.categorySales[filter.name].quantity;
+      matchAmount = lastStats.categorySales[filter.name].revenue;
+    } else if (filter.type === 'product' && lastRanking) {
+      const p = lastRanking.find(r => r.name === filter.name);
+      if (p) { matchQty = p.quantity; matchAmount = p.revenue; }
+    }
+
+    summary = `<span>订单总数：<strong>${orders.length}</strong> 单</span>`
+      + `<span>涉及件数：<strong>${formatNum(matchQty)}</strong> 件</span>`
+      + `<span>涉及金额：<strong>¥ ${formatNum(Number(matchAmount).toFixed(2))}</strong></span>`
+      + `<span>订单总金额：<strong>¥ ${formatNum(totalAmount.toFixed(2))}</strong></span>`;
+
+    const bodyHtml = orders.length === 0
+      ? `<div class="empty-tip">暂无匹配的订单</div>`
+      : orderHtml;
+
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">${title}</div>
+          <button class="modal-close" onclick="this.closest('.modal-mask').remove()">×</button>
+        </div>
+        <div class="modal-summary">${summary}</div>
+        <div class="modal-body">${bodyHtml}</div>
+      </div>
+    `;
+    mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
+    document.body.appendChild(mask);
   }
 
   loadData();

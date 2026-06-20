@@ -43,16 +43,33 @@ const PRODUCT_CATALOG = [
   { name: '奶酪', category: '乳品', price: 12.0 }
 ];
 
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function createSeededRandom(seed) {
+  let s = seed >>> 0;
+  return function() {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
 }
 
-function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+function seedFromString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
-function generateOrder(orderId, date) {
-  const itemCount = randomInt(1, 8);
+function randomInt(rng, min, max) {
+  return Math.floor(rng() * (max - min + 1)) + min;
+}
+
+function pickRandom(rng, arr) {
+  return arr[Math.floor(rng() * arr.length)];
+}
+
+function generateOrder(rng, orderId, date) {
+  const itemCount = randomInt(rng, 1, 8);
   const items = [];
   const usedProducts = new Set();
   let totalAmount = 0;
@@ -60,11 +77,11 @@ function generateOrder(orderId, date) {
   for (let i = 0; i < itemCount; i++) {
     let product;
     do {
-      product = pickRandom(PRODUCT_CATALOG);
+      product = pickRandom(rng, PRODUCT_CATALOG);
     } while (usedProducts.has(product.name));
     usedProducts.add(product.name);
 
-    const quantity = randomInt(1, 5) + (Math.random() > 0.7 ? randomInt(1, 3) : 0);
+    const quantity = randomInt(rng, 1, 5) + (rng() > 0.7 ? randomInt(rng, 1, 3) : 0);
     const subtotal = product.price * quantity;
     totalAmount += subtotal;
 
@@ -77,8 +94,8 @@ function generateOrder(orderId, date) {
     });
   }
 
-  const hour = randomInt(7, 20);
-  const minute = randomInt(0, 59);
+  const hour = randomInt(rng, 7, 20);
+  const minute = randomInt(rng, 0, 59);
   const orderTime = new Date(date);
   orderTime.setHours(hour, minute, 0, 0);
 
@@ -93,14 +110,20 @@ function generateOrder(orderId, date) {
 function generateMockOrders() {
   const orders = [];
   const today = new Date();
+  const baseY = today.getFullYear();
+  const baseM = today.getMonth();
+  const baseD = today.getDate();
   let orderId = 1;
 
   for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - dayOffset);
-    const orderCount = randomInt(35, 70);
+    const date = new Date(baseY, baseM, baseD - dayOffset);
+    const daySeed = seedFromString(`${baseY}-${baseM}-${baseD - dayOffset}`);
+    const dayRng = createSeededRandom(daySeed);
+    const orderCount = randomInt(dayRng, 35, 70);
     for (let i = 0; i < orderCount; i++) {
-      orders.push(generateOrder(`ORD${String(orderId).padStart(6, '0')}`, date));
+      const orderSeed = seedFromString(`order-${baseY}-${baseM}-${baseD - dayOffset}-${i}`);
+      const orderRng = createSeededRandom(orderSeed);
+      orders.push(generateOrder(orderRng, `ORD${String(orderId).padStart(6, '0')}`, date));
       orderId++;
     }
   }

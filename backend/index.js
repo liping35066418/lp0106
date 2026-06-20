@@ -10,15 +10,18 @@ app.use(express.json());
 
 const orders = generateMockOrders();
 
-function filterByPeriod(orders, period, targetDate) {
+function filterByPeriod(orders, period, targetDate, nowIso) {
   const target = new Date(targetDate);
   const year = target.getFullYear();
   const month = target.getMonth();
   const date = target.getDate();
   const day = target.getDay();
 
+  const now = nowIso ? new Date(nowIso) : null;
+
+  let periodFiltered;
   if (period === 'day') {
-    return orders.filter(o => {
+    periodFiltered = orders.filter(o => {
       const d = new Date(o.orderTime);
       return d.getFullYear() === year
         && d.getMonth() === month
@@ -28,20 +31,43 @@ function filterByPeriod(orders, period, targetDate) {
     const mondayDate = date - (day === 0 ? 6 : day - 1);
     const monday = new Date(year, month, mondayDate, 0, 0, 0);
     const sunday = new Date(year, month, mondayDate + 6, 23, 59, 59);
-    return orders.filter(o => {
+    periodFiltered = orders.filter(o => {
       const d = new Date(o.orderTime);
       return d >= monday && d <= sunday;
     });
   }
+
+  if (now && !isNaN(now.getTime())) {
+    periodFiltered = periodFiltered.filter(o => new Date(o.orderTime) <= now);
+  }
+
+  return periodFiltered;
+}
+
+function filterOrdersByDetail(orders, category, product) {
+  if (!category && !product) return orders;
+  return orders.filter(o => {
+    return o.items.some(it => {
+      if (category && product) {
+        return it.category === category && it.name === product;
+      } else if (category) {
+        return it.category === category;
+      } else if (product) {
+        return it.name === product;
+      }
+      return false;
+    });
+  });
 }
 
 app.get('/api/stats', (req, res) => {
-  const { period = 'day', date = new Date().toISOString() } = req.query;
-  const filteredOrders = filterByPeriod(orders, period, date);
+  const { period = 'day', date = new Date().toISOString(), now } = req.query;
+  const filteredOrders = filterByPeriod(orders, period, date, now);
   const stats = aggregateStats(filteredOrders);
   res.json({
     period,
     date,
+    now,
     orderCount: stats.orderCount,
     totalRevenue: stats.totalRevenue,
     avgOrderValue: stats.avgOrderValue,
@@ -51,8 +77,8 @@ app.get('/api/stats', (req, res) => {
 });
 
 app.get('/api/products', (req, res) => {
-  const { period = 'day', date = new Date().toISOString() } = req.query;
-  const filteredOrders = filterByPeriod(orders, period, date);
+  const { period = 'day', date = new Date().toISOString(), now } = req.query;
+  const filteredOrders = filterByPeriod(orders, period, date, now);
   const stats = aggregateStats(filteredOrders);
   const productList = Object.entries(stats.productSales).map(([name, data]) => ({
     name,
@@ -65,13 +91,14 @@ app.get('/api/products', (req, res) => {
   res.json({
     period,
     date,
+    now,
     products: productList
   });
 });
 
 app.get('/api/ranking', (req, res) => {
-  const { period = 'day', date = new Date().toISOString(), top = 10 } = req.query;
-  const filteredOrders = filterByPeriod(orders, period, date);
+  const { period = 'day', date = new Date().toISOString(), top = 10, now } = req.query;
+  const filteredOrders = filterByPeriod(orders, period, date, now);
   const stats = aggregateStats(filteredOrders);
   const ranking = Object.entries(stats.productSales)
     .map(([name, data]) => ({
@@ -87,18 +114,23 @@ app.get('/api/ranking', (req, res) => {
   res.json({
     period,
     date,
+    now,
     top: parseInt(top),
     ranking
   });
 });
 
 app.get('/api/orders', (req, res) => {
-  const { period = 'day', date = new Date().toISOString() } = req.query;
-  const filteredOrders = filterByPeriod(orders, period, date);
+  const { period = 'day', date = new Date().toISOString(), now, category, product } = req.query;
+  let filteredOrders = filterByPeriod(orders, period, date, now);
+  filteredOrders = filterOrdersByDetail(filteredOrders, category, product);
   filteredOrders.sort((a, b) => new Date(b.orderTime) - new Date(a.orderTime));
   res.json({
     period,
     date,
+    now,
+    category,
+    product,
     total: filteredOrders.length,
     orders: filteredOrders
   });
